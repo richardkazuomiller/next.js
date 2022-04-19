@@ -174,7 +174,7 @@
     "buffer": "5.6.0",
     "bytes": "3.1.1",
     "chalk": "2.4.2",
-    "ci-info": "watson/ci-info#f43f6a1cefff47fb361c88cf4b943fdbcaafe540",
+    "ci-info": "watson/ci-info#1f890078805447ed39b17a6ad136356a7d5cd68b",
     "cli-select": "1.1.2",
     "comment-json": "3.0.3",
     "compression": "1.7.4",
