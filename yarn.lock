@@ -4732,9 +4732,10 @@
   resolved "https://registry.yarnpkg.com/@tootallnate/once/-/once-1.1.2.tgz#ccb91445360179a04e7fe6aff78c00ffc1eeaf82"
   integrity sha512-RbzJvlNzmRq5c3O09UipeuXno4tA1FE6ikOjxZK0tuxVv3412l64l5t1W5pj4+rJq9vpkm/kwiR07aZXnsKPxw==
 
-"@types/amphtml-validator@1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@types/amphtml-validator/-/amphtml-validator-1.0.0.tgz#9d4e0c879642938bbe5f363d49cafc8ae9f57c81"
+"@types/amphtml-validator@1.0.1":
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/@types/amphtml-validator/-/amphtml-validator-1.0.1.tgz#8181de280a6461b7425f494dd39bb21a33939f08"
+  integrity sha512-DWE7fy6KtC+Uw0KV/HAmjuH2GB/o8yskXlvmVWR7mOVsLDybp+XrwkzEeRFU9wGjWKeRMBNGsx+5DRq7sUsAwA==
   dependencies:
     "@types/node" "*"
 
@@ -21539,7 +21540,6 @@ webpack-bundle-analyzer@4.3.0:
 
 "webpack@link:./node_modules/webpack5":
   version "0.0.0"
-  uid ""
 
 websocket-driver@>=0.5.1:
   version "0.7.3"
