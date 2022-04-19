@@ -7,6 +7,9 @@
   "baseBranches": ["canary", "next"],
   "gitAuthor": "Ricky Miller <ricky@ricky.me>",
   "rangeStrategy": "bump",
+  "ignorePaths: [
+    "packages/next/compiled/**/*"
+  ],
   "packageRules": [
     {
       "matchBaseBranches": ["canary"],
