@@ -1,0 +1,16 @@
+{
+  "extends": [
+    "config:base"
+  ],
+  "dependencyDashboard": true,
+  "prHourlyLimit": 0,
+  "baseBranches": ["canary", "next"],
+  "gitAuthor": "Ricky Miller <ricky@ricky.me>",
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "matchBaseBranches": ["canary"],
+      "rangeStrategy": "replace"
+    }
+  ]
+}
