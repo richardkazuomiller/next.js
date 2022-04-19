@@ -4,12 +4,12 @@
   ],
   "dependencyDashboard": true,
   "prHourlyLimit": 0,
-  "baseBranches": ["main", "next"],
+  "baseBranches": ["canary", "next"],
   "gitAuthor": "Ricky Miller <ricky@ricky.me>",
   "rangeStrategy": "bump",
   "packageRules": [
     {
-      "matchBaseBranches": ["main"],
+      "matchBaseBranches": ["canary"],
       "rangeStrategy": "replace"
     }
   ]
