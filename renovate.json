@@ -1,5 +1,16 @@
 {
   "extends": [
     "config:base"
+  ],
+  "dependencyDashboard": true,
+  "prHourlyLimit": 0,
+  "baseBranches": ["main", "next"],
+  "gitAuthor": "Ricky Miller <ricky@ricky.me>",
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "matchBaseBranches": ["main"],
+      "rangeStrategy": "replace"
+    }
   ]
 }
