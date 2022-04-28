@@ -10,15 +10,14 @@
   "ignorePaths": [
     "packages/next/compiled/**/*"
   ],
-  "enabled": false,
   "packageRules": [
     {
       "matchBaseBranches": ["canary"],
       "rangeStrategy": "replace"
     },
     {
-      "matchPackagePrefixes": ["eslint-"],
-      "enabled": true
+      "excludePackagePrefixes": ["eslint-"],
+      "enabled": false
     }
   ]
 }
