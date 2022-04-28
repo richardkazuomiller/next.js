@@ -10,10 +10,8 @@
   "ignorePaths": [
     "packages/next/compiled/**/*"
   ],
+  "enabled": false,
   "packageRules": [
-    {
-      "enabled": false
-    },
     {
       "matchBaseBranches": ["canary"],
       "rangeStrategy": "replace"
