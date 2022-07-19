@@ -73,6 +73,14 @@ fn init(mut exports: JsObject) -> napi::Result<()> {
     exports.create_named_method("parse", parse::parse)?;
 
     exports.create_named_method("getTargetTriple", util::get_target_triple)?;
+    exports.create_named_method(
+        "initCustomTraceSubscriber",
+        util::init_custom_trace_subscriber,
+    )?;
+    exports.create_named_method("teardownTraceSubscriber", util::teardown_trace_subscriber)?;
+
+    exports.create_named_method("initCrashReporter", util::init_crash_reporter)?;
+    exports.create_named_method("teardownCrashReporter", util::teardown_crash_reporter)?;
 
     Ok(())
 }

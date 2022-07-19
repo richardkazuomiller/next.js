@@ -2,27 +2,32 @@ import type { WebNextRequest, WebNextResponse } from './base-http/web'
 import type { RenderOpts } from './render'
 import type RenderResult from './render-result'
 import type { NextParsedUrlQuery } from './request-meta'
-import type { Params } from './router'
+import type { Params } from '../shared/lib/router/utils/route-matcher'
 import type { PayloadOptions } from './send-payload'
 import type { LoadComponentsReturnType } from './load-components'
 import type { Options } from './base-server'
 
 import BaseServer from './base-server'
 import { renderToHTML } from './render'
-import { byteLength, generateETag } from './api-utils/web'
+import { byteLength } from './api-utils/web'
+import { generateETag } from './lib/etag'
 
-interface WebServerConfig {
-  loadComponent: (pathname: string) => Promise<LoadComponentsReturnType | null>
-  extendRenderOpts?: Partial<BaseServer['renderOpts']>
+interface WebServerOptions extends Options {
+  webServerConfig: {
+    page: string
+    loadComponent: (
+      pathname: string
+    ) => Promise<LoadComponentsReturnType | null>
+    extendRenderOpts: Partial<BaseServer['renderOpts']> &
+      Pick<BaseServer['renderOpts'], 'buildId'>
+  }
 }
 
-export default class NextWebServer extends BaseServer {
-  webServerConfig: WebServerConfig
-
-  constructor(options: Options & { webServerConfig: WebServerConfig }) {
+export default class NextWebServer extends BaseServer<WebServerOptions> {
+  constructor(options: WebServerOptions) {
     super(options)
 
-    this.webServerConfig = options.webServerConfig
+    // Extend `renderOpts`.
     Object.assign(this.renderOpts, options.webServerConfig.extendRenderOpts)
   }
 
@@ -58,16 +63,13 @@ export default class NextWebServer extends BaseServer {
     return ''
   }
   protected getBuildId() {
-    return (globalThis as any).__server_context.buildId
+    return this.serverOptions.webServerConfig.extendRenderOpts.buildId
   }
   protected loadEnvConfig() {
     // The web server does not need to load the env config. This is done by the
     // runtime already.
   }
   protected getHasStaticDir() {
-    return false
-  }
-  protected async hasMiddleware() {
     return false
   }
   protected generateImageRoutes() {
@@ -82,21 +84,20 @@ export default class NextWebServer extends BaseServer {
   protected generatePublicRoutes() {
     return []
   }
-  protected getMiddleware() {
-    return []
-  }
   protected generateCatchAllMiddlewareRoute() {
-    return undefined
+    return []
   }
   protected getFontManifest() {
     return undefined
   }
-  protected getMiddlewareManifest() {
-    return undefined
-  }
   protected getPagesManifest() {
     return {
-      [(globalThis as any).__server_context.page]: '',
+      [this.serverOptions.webServerConfig.page]: '',
+    }
+  }
+  protected getAppPathsManifest() {
+    return {
+      [this.serverOptions.webServerConfig.page]: '',
     }
   }
   protected getFilesystemPaths() {
@@ -138,7 +139,7 @@ export default class NextWebServer extends BaseServer {
       {
         ...renderOpts,
         disableOptimizedLoading: true,
-        runtime: 'edge',
+        runtime: 'experimental-edge',
       }
     )
   }
@@ -183,7 +184,7 @@ export default class NextWebServer extends BaseServer {
       const payload = await options.result.toUnchunkedString()
       res.setHeader('Content-Length', String(byteLength(payload)))
       if (options.generateEtags) {
-        res.setHeader('ETag', await generateETag(payload))
+        res.setHeader('ETag', generateETag(payload))
       }
       res.body(payload)
     }
@@ -199,7 +200,9 @@ export default class NextWebServer extends BaseServer {
     query?: NextParsedUrlQuery,
     params?: Params | null
   ) {
-    const result = await this.webServerConfig.loadComponent(pathname)
+    const result = await this.serverOptions.webServerConfig.loadComponent(
+      pathname
+    )
     if (!result) return null
 
     return {

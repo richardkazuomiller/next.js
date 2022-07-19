@@ -1,9 +1,14 @@
 import React, { Component, ReactElement, ReactNode, useContext } from 'react'
-import { OPTIMIZED_FONT_PROVIDERS } from '../shared/lib/constants'
+import {
+  OPTIMIZED_FONT_PROVIDERS,
+  NEXT_BUILTIN_DOCUMENT,
+} from '../shared/lib/constants'
 import type {
   DocumentContext,
   DocumentInitialProps,
   DocumentProps,
+  DocumentType,
+  NEXT_DATA,
 } from '../shared/lib/utils'
 import { BuildManifest, getPageFiles } from '../server/get-page-files'
 import { cleanAmpPath } from '../server/utils'
@@ -27,6 +32,13 @@ type DocumentFiles = {
   pageFiles: readonly string[]
   allFiles: readonly string[]
 }
+
+type HeadHTMLProps = React.DetailedHTMLProps<
+  React.HTMLAttributes<HTMLHeadElement>,
+  HTMLHeadElement
+>
+
+type HeadProps = OriginProps & HeadHTMLProps
 
 function getDocumentFiles(
   buildManifest: BuildManifest,
@@ -76,6 +88,59 @@ function hasComponentProps(child: any): child is React.ReactElement {
   return !!child && !!child.props
 }
 
+function handleDocumentScriptLoaderItems(
+  scriptLoader: { beforeInteractive?: any[] },
+  __NEXT_DATA__: NEXT_DATA,
+  props: any
+): void {
+  if (!props.children) return
+
+  const scriptLoaderItems: ScriptProps[] = []
+
+  const children = Array.isArray(props.children)
+    ? props.children
+    : [props.children]
+
+  const headChildren = children.find(
+    (child: React.ReactElement) => child.type === Head
+  )?.props?.children
+  const bodyChildren = children.find(
+    (child: React.ReactElement) => child.type === 'body'
+  )?.props?.children
+
+  // Scripts with beforeInteractive can be placed inside Head or <body> so children of both needs to be traversed
+  const combinedChildren = [
+    ...(Array.isArray(headChildren) ? headChildren : [headChildren]),
+    ...(Array.isArray(bodyChildren) ? bodyChildren : [bodyChildren]),
+  ]
+
+  React.Children.forEach(combinedChildren, (child: any) => {
+    if (!child) return
+
+    if (child.type === Script) {
+      if (child.props.strategy === 'beforeInteractive') {
+        scriptLoader.beforeInteractive = (
+          scriptLoader.beforeInteractive || []
+        ).concat([
+          {
+            ...child.props,
+          },
+        ])
+        return
+      } else if (
+        ['lazyOnload', 'afterInteractive', 'worker'].includes(
+          child.props.strategy
+        )
+      ) {
+        scriptLoaderItems.push(child.props)
+        return
+      }
+    }
+  })
+
+  __NEXT_DATA__.scriptLoader = scriptLoaderItems
+}
+
 function getPreNextWorkerScripts(context: HtmlProps, props: OriginProps) {
   const { assetPrefix, scriptLoader, crossOrigin, nextScriptWorkers } = context
 
@@ -121,12 +186,54 @@ function getPreNextWorkerScripts(context: HtmlProps, props: OriginProps) {
           }}
         />
         {(scriptLoader.worker || []).map((file: ScriptProps, index: number) => {
-          const { strategy, ...scriptProps } = file
+          const {
+            strategy,
+            src,
+            children: scriptChildren,
+            dangerouslySetInnerHTML,
+            ...scriptProps
+          } = file
+
+          let srcProps: {
+            src?: string
+            dangerouslySetInnerHTML?: {
+              __html: string
+            }
+          } = {}
+
+          if (src) {
+            // Use external src if provided
+            srcProps.src = src
+          } else if (
+            dangerouslySetInnerHTML &&
+            dangerouslySetInnerHTML.__html
+          ) {
+            // Embed inline script if provided with dangerouslySetInnerHTML
+            srcProps.dangerouslySetInnerHTML = {
+              __html: dangerouslySetInnerHTML.__html,
+            }
+          } else if (scriptChildren) {
+            // Embed inline script if provided with children
+            srcProps.dangerouslySetInnerHTML = {
+              __html:
+                typeof scriptChildren === 'string'
+                  ? scriptChildren
+                  : Array.isArray(scriptChildren)
+                  ? scriptChildren.join('')
+                  : '',
+            }
+          } else {
+            throw new Error(
+              'Invalid usage of next/script. Did you forget to include a src attribute or an inline script? https://nextjs.org/docs/messages/invalid-script'
+            )
+          }
+
           return (
             <script
+              {...srcProps}
               {...scriptProps}
               type="text/partytown"
-              key={scriptProps.src || index}
+              key={src || index}
               nonce={props.nonce}
               data-nscript="worker"
               crossOrigin={props.crossOrigin || crossOrigin}
@@ -137,9 +244,7 @@ function getPreNextWorkerScripts(context: HtmlProps, props: OriginProps) {
     )
   } catch (err) {
     if (isError(err) && err.code !== 'MODULE_NOT_FOUND') {
-      console.warn(
-        `Warning: Partytown could not be instantiated in your application due to an error. ${err.message}`
-      )
+      console.warn(`Warning: ${err.message}`)
     }
     return null
   }
@@ -150,8 +255,9 @@ function getPreNextScripts(context: HtmlProps, props: OriginProps) {
 
   const webWorkerScripts = getPreNextWorkerScripts(context, props)
 
-  const beforeInteractiveScripts = (scriptLoader.beforeInteractive || []).map(
-    (file: ScriptProps, index: number) => {
+  const beforeInteractiveScripts = (scriptLoader.beforeInteractive || [])
+    .filter((script) => script.src)
+    .map((file: ScriptProps, index: number) => {
       const { strategy, ...scriptProps } = file
       return (
         <script
@@ -163,8 +269,7 @@ function getPreNextScripts(context: HtmlProps, props: OriginProps) {
           crossOrigin={props.crossOrigin || crossOrigin}
         />
       )
-    }
-  )
+    })
 
   return (
     <>
@@ -269,7 +374,7 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
 
 // Add a special property to the built-in `Document` component so later we can
 // identify if a user customized `Document` is used or not.
-;(Document as any).__next_internal_document =
+const InternalFunctionDocument: DocumentType =
   function InternalFunctionDocument() {
     return (
       <Html>
@@ -281,6 +386,7 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
       </Html>
     )
   }
+;(Document as any)[NEXT_BUILTIN_DOCUMENT] = InternalFunctionDocument
 
 export function Html(
   props: React.DetailedHTMLProps<
@@ -288,9 +394,16 @@ export function Html(
     HTMLHtmlElement
   >
 ) {
-  const { inAmpMode, docComponentsRendered, locale } = useContext(HtmlContext)
+  const {
+    inAmpMode,
+    docComponentsRendered,
+    locale,
+    scriptLoader,
+    __NEXT_DATA__,
+  } = useContext(HtmlContext)
 
   docComponentsRendered.Html = true
+  handleDocumentScriptLoaderItems(scriptLoader, __NEXT_DATA__, props)
 
   return (
     <html
@@ -348,13 +461,7 @@ function AmpStyles({
   )
 }
 
-export class Head extends Component<
-  OriginProps &
-    React.DetailedHTMLProps<
-      React.HTMLAttributes<HTMLHeadElement>,
-      HTMLHeadElement
-    >
-> {
+export class Head extends Component<HeadProps> {
   static contextType = HtmlContext
 
   context!: React.ContextType<typeof HtmlContext>
@@ -500,6 +607,49 @@ export class Head extends Component<
     ]
   }
 
+  getBeforeInteractiveInlineScripts() {
+    const { scriptLoader } = this.context
+    const { nonce, crossOrigin } = this.props
+
+    return (scriptLoader.beforeInteractive || [])
+      .filter(
+        (script) =>
+          !script.src && (script.dangerouslySetInnerHTML || script.children)
+      )
+      .map((file: ScriptProps, index: number) => {
+        const {
+          strategy,
+          children,
+          dangerouslySetInnerHTML,
+          src,
+          ...scriptProps
+        } = file
+        let html = ''
+
+        if (dangerouslySetInnerHTML && dangerouslySetInnerHTML.__html) {
+          html = dangerouslySetInnerHTML.__html
+        } else if (children) {
+          html =
+            typeof children === 'string'
+              ? children
+              : Array.isArray(children)
+              ? children.join('')
+              : ''
+        }
+
+        return (
+          <script
+            {...scriptProps}
+            dangerouslySetInnerHTML={{ __html: html }}
+            key={scriptProps.id || index}
+            nonce={nonce}
+            data-nscript="beforeInteractive"
+            crossOrigin={crossOrigin || process.env.__NEXT_CROSS_ORIGIN}
+          />
+        )
+      })
+  }
+
   getDynamicChunks(files: DocumentFiles) {
     return getDynamicChunks(this.context, this.props, files)
   }
@@ -514,40 +664,6 @@ export class Head extends Component<
 
   getPolyfillScripts() {
     return getPolyfillScripts(this.context, this.props)
-  }
-
-  handleDocumentScriptLoaderItems(children: React.ReactNode): ReactNode[] {
-    const { scriptLoader } = this.context
-    const scriptLoaderItems: ScriptProps[] = []
-    const filteredChildren: ReactNode[] = []
-
-    React.Children.forEach(children, (child: any) => {
-      if (child.type === Script) {
-        if (child.props.strategy === 'beforeInteractive') {
-          scriptLoader.beforeInteractive = (
-            scriptLoader.beforeInteractive || []
-          ).concat([
-            {
-              ...child.props,
-            },
-          ])
-          return
-        } else if (
-          ['lazyOnload', 'afterInteractive', 'worker'].includes(
-            child.props.strategy
-          )
-        ) {
-          scriptLoaderItems.push(child.props)
-          return
-        }
-      }
-
-      filteredChildren.push(child)
-    })
-
-    this.context.__NEXT_DATA__.scriptLoader = scriptLoaderItems
-
-    return filteredChildren
   }
 
   makeStylesheetInert(node: ReactNode): ReactNode[] {
@@ -651,8 +767,6 @@ export class Head extends Component<
       children = this.makeStylesheetInert(children)
     }
 
-    children = this.handleDocumentScriptLoaderItems(children)
-
     let hasAmphtmlRel = false
     let hasCanonicalRel = false
 
@@ -707,7 +821,7 @@ export class Head extends Component<
     )
 
     return (
-      <head {...this.props}>
+      <head {...getHeadHTMLProps(this.props)}>
         {this.context.isDevelopment && (
           <>
             <style
@@ -782,6 +896,7 @@ export class Head extends Component<
                 href={canonicalBase + getAmpPath(ampPath, dangerousAsPath)}
               />
             )}
+            {this.getBeforeInteractiveInlineScripts()}
             {!optimizeCss && this.getCssLinks(files)}
             {!optimizeCss && <noscript data-n-css={this.props.nonce ?? ''} />}
 
@@ -835,10 +950,6 @@ export class NextScript extends Component<OriginProps> {
 
   context!: React.ContextType<typeof HtmlContext>
 
-  // Source: https://gist.github.com/samthor/64b114e4a4f539915a95b91ffd340acc
-  static safariNomoduleFix =
-    '!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()},!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();'
-
   getDynamicChunks(files: DocumentFiles) {
     return getDynamicChunks(this.context, this.props, files)
   }
@@ -856,20 +967,23 @@ export class NextScript extends Component<OriginProps> {
   }
 
   static getInlineScriptSource(context: Readonly<HtmlProps>): string {
-    const { __NEXT_DATA__ } = context
+    const { __NEXT_DATA__, largePageDataBytes } = context
     try {
       const data = JSON.stringify(__NEXT_DATA__)
+      const bytes =
+        process.env.NEXT_RUNTIME === 'edge'
+          ? new TextEncoder().encode(data).buffer.byteLength
+          : Buffer.from(data).byteLength
+      const prettyBytes = require('../lib/pretty-bytes').default
 
-      if (process.env.NODE_ENV === 'development') {
-        const bytes = Buffer.from(data).byteLength
-        const prettyBytes = require('../lib/pretty-bytes').default
-        if (bytes > 128 * 1000) {
-          console.warn(
-            `Warning: data for page "${__NEXT_DATA__.page}" is ${prettyBytes(
-              bytes
-            )}, this amount of data can reduce performance.\nSee more info here: https://nextjs.org/docs/messages/large-page-data`
-          )
-        }
+      if (largePageDataBytes && bytes > largePageDataBytes) {
+        console.warn(
+          `Warning: data for page "${__NEXT_DATA__.page}" is ${prettyBytes(
+            bytes
+          )} which exceeds the threshold of ${prettyBytes(
+            largePageDataBytes
+          )}, this amount of data can reduce performance.\nSee more info here: https://nextjs.org/docs/messages/large-page-data`
+        )
       }
 
       return htmlEscapeJsonString(data)
@@ -990,4 +1104,15 @@ export class NextScript extends Component<OriginProps> {
 
 function getAmpPath(ampPath: string, asPath: string): string {
   return ampPath || `${asPath}${asPath.includes('?') ? '&' : '?'}amp=1`
+}
+
+function getHeadHTMLProps(props: HeadProps) {
+  const { crossOrigin, nonce, ...restProps } = props
+
+  // This assignment is necessary for additional type checking to avoid unsupported attributes in <head>
+  const headProps: HeadHTMLProps & {
+    [P in Exclude<keyof HeadProps, keyof HeadHTMLProps>]?: never
+  } = restProps
+
+  return headProps
 }
